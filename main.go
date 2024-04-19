@@ -13,8 +13,8 @@ import (
 )
 
 func main() {
-	apiKey := "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"
-	client := openai.NewClient(apiKey)
+	aikey := "inmyhead"
+	client := openai.NewClient(aikey)
 
 	// Variables for rate limiting
 	retryDelay := 20 * time.Second
