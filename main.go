@@ -10,7 +10,6 @@ import (
 )
 
 func main() {
-	apiKey := "sk-proj-l9Bv3DyD55WiSaD0vMapT3BlbkFJsYtD4er0e7NJ4faZ29ep"
 	apiEndpoint := "https://api.openai.com/v1/engines/gpt-3.5-turbo/completions"
 
 	client := resty.New()
