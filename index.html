@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ChatGPT Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+            margin-top: 20px;
+        }
+        form {
+            text-align: center;
+            margin-top: 20px;
+        }
+        input[type="text"] {
+            padding: 5px;
+            width: 300px;
+            font-size: 16px;
+        }
+        input[type="submit"] {
+            padding: 5px 10px;
+            font-size: 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        #response {
+            margin-top: 20px;
+            text-align: center;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+    </style>
+    <script>
+        function submitQuestion() {
+            var question = document.getElementById("question").value;
+            var xhr = new XMLHttpRequest();
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState == XMLHttpRequest.DONE) {
+                    if (xhr.responseText.startsWith("Declined")) {
+                        alert(xhr.responseText);
+                    } else {
+                        document.getElementById("response").innerText = xhr.responseText;
+                    }
+                }
+            };
+
+            var filterWords = ["alcohol", "18+", "drugs"]; // Define your filter words here
+            var containsFilterWord = filterWords.some(word => question.toLowerCase().includes(word.toLowerCase()));
+
+            if (!containsFilterWord) {
+                xhr.open("POST", "/");
+                xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+                xhr.send("question=" + encodeURIComponent(question));
+            } else {
+                alert("Your request was declined because your question is not related to kids environment.");
+                xhr.abort(); // Abort the request
+            }
+        }
+    </script>
+
+</head>
+<body>
+<h1>Ask me anything!</h1>
+<form onsubmit="submitQuestion(); return false;">
+    <label for="question">Your question:</label><br>
+    <input type="text" id="question" name="question"><br><br>
+    <input type="submit" value="Ask me">
+</form>
+<div id="response">
+    <!-- response  -->
+</div>
+</body>
+</html>

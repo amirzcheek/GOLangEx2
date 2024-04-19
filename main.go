@@ -1,63 +1,103 @@
 package main
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"log"
+	"net/http"
+	"os"
 	"strings"
+	"time"
 
-	"github.com/go-resty/resty/v2"
+	openai "github.com/sashabaranov/go-openai"
 )
 
 func main() {
-	apiEndpoint := "https://api.openai.com/v1/engines/gpt-3.5-turbo/completions"
+	apiKey := "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"
+	client := openai.NewClient(apiKey)
 
-	client := resty.New()
+	// Variables for rate limiting
+	retryDelay := 20 * time.Second
+	maxRetries := 3
+	retryCount := 0
+	var prevInput string
 
-	for {
-		// Get user input
-		var userInput string
-		fmt.Print("You: ")
-		fmt.Scanln(&userInput)
-
-		// Send user input to ChatGPT
-		response, err := client.R().
-			SetAuthToken(apiKey).
-			SetHeader("Content-Type", "application/json").
-			SetBody(map[string]interface{}{
-				"model":      "gpt-3.5-turbo",
-				"messages":   []interface{}{map[string]interface{}{"role": "user", "content": userInput}},
-				"max_tokens": 512,
-			}).
-			Post(apiEndpoint)
-
-		if err != nil {
-			log.Fatalf("Error while sending the request: %v", err)
-		}
-
-		body := response.Body()
-
-		var data map[string]interface{}
-		err = json.Unmarshal(body, &data)
-		if err != nil {
-			fmt.Println("Error while decoding JSON response:", err)
-			return
-		}
-
-		// Check if choices is not nil
-		if choices, ok := data["choices"].([]interface{}); ok && len(choices) > 0 {
-			// Extract the content from the JSON response
-			if message, ok := choices[0].(map[string]interface{})["message"].(map[string]interface{}); ok {
-				content := message["content"].(string)
-				fmt.Println("ChatGPT:", content)
-			}
-		} else {
-			fmt.Println("ChatGPT: Sorry, I couldn't understand that.")
-		}
-
-		// Exit the loop if the user says "exit"
-		if strings.ToLower(userInput) == "exit" {
-			break
-		}
+	// Open a log file for writing
+	logFile, err := os.OpenFile("request_log.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatalf("Error opening log file: %v", err)
 	}
+	defer logFile.Close()
+	logger := log.New(logFile, "", log.LstdFlags)
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			// Get user input from the form
+			userInput := r.FormValue("question")
+
+			// Check if the input contains keywords
+			filterWords := []string{"alcohol", "18+", "drugs"}
+			for _, word := range filterWords {
+				if strings.Contains(userInput, word) {
+					// Decline the request if it contains any filter word
+					fmt.Fprint(w, "Declined: Your request was declined because your question is not suitable for children.")
+					return
+				}
+			}
+
+			logger.Printf("Request: %s\n", userInput)
+			// Concatenate with previous input if it doesn't contain keywords
+			userInput = prevInput + " " + userInput
+
+			// Send user input to ChatGPT
+			resp, err := client.CreateChatCompletion(
+				context.Background(),
+				openai.ChatCompletionRequest{
+					Model: openai.GPT3Dot5Turbo,
+					Messages: []openai.ChatCompletionMessage{
+						{
+							Role:    openai.ChatMessageRoleUser,
+							Content: userInput,
+						},
+					},
+				},
+			)
+
+			if err != nil {
+				if strings.Contains(err.Error(), "Rate limit reached") {
+					// Retry logic
+					retryCount++
+					if retryCount > maxRetries {
+						log.Fatalf("Max retry limit reached. Exiting.")
+						return
+					}
+					fmt.Printf("Rate limit reached. Waiting for %v before retrying.\n", retryDelay)
+					time.Sleep(retryDelay)
+					return
+				}
+				log.Fatalf("ChatCompletion error: %v", err)
+				return
+			}
+
+			// Reset retry count on successful response
+			retryCount = 0
+
+			// Print the response
+			var response string
+			if len(resp.Choices) > 0 {
+				response = resp.Choices[0].Message.Content
+			} else {
+				response = "Sorry, I couldn't understand that."
+			}
+
+			// Display the response on the web page
+			fmt.Fprint(w, response)
+
+		} else {
+			http.ServeFile(w, r, "index.html")
+		}
+	})
+
+	log.Println("Starting server on :8080...")
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
